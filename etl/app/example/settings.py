@@ -1,0 +1,152 @@
+
+import os
+from pathlib import Path
+import os
+from pathlib import Path
+from example.tracing import configure_tracer
+
+
+configure_tracer(service_name='django-content')
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+SECRET_KEY = os.getenv('SECRET_KEY')
+
+DEBUG = os.getenv('DEBUG', False) == 'True'
+
+REDIS_AUTH_HOST = os.getenv('REDIS_AUTH_HOST', 'auth-redis')
+REDIS_AUTH_PORT = int(os.getenv('REDIS_AUTH_PORT', 6380))
+REDIS_AUTH_PASSW = os.getenv('REDIS_AUTH_PASSW', '')
+REDIS_AUTH_DB = int(os.getenv('REDIS_AUTH_DB', 1))
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv('ALLOWED_HOSTS', '').split(',')
+    if host.strip()
+]
+
+CORS_ALLOWED_ORIGINS = [
+    cors.strip()
+    for cors in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
+    if cors.strip()
+]
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'debug_toolbar',
+    'django.contrib.staticfiles',
+    'corsheaders',
+    'movies.apps.MoviesConfig',
+]
+
+
+MIDDLEWARE = [
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'movies.middleware.rate_limit.RateLimitMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'movies.middleware.auth_middleware.AuthMiddleware',
+]
+
+if DEBUG:
+    INSTALLED_APPS += ['silk']
+    MIDDLEWARE.insert(1, 'silk.middleware.SilkyMiddleware')
+
+ROOT_URLCONF = 'example.urls'
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = 'example.wsgi.application'
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('POSTGRES_DB'),
+        'USER': os.getenv('POSTGRES_USER'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
+        'HOST': os.getenv('POSTGRES_HOST', '127.0.0.1'),
+        'PORT': os.getenv('POSTGRES_PORT', 5432),
+        'OPTIONS': {
+            'options': os.getenv('POSTGRES_OPTIONS'),
+        },
+    },
+}
+
+raw_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
+
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in raw_origins.split(',')
+    if origin.strip()
+]
+
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+]
+
+LANGUAGE_CODE = 'en-us'
+
+TIME_ZONE = 'UTC'
+
+USE_I18N = True
+
+USE_TZ = True
+
+STATIC_URL = '/static/'
+
+
+STATIC_ROOT = '/var/www/static/'
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+]
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = '/var/www/media/'
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+DEBUG_TOOLBAR_CONFIG = {
+    'SHOW_TOOLBAR_CALLBACK': lambda request: DEBUG,
+}
+
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'change-me')
+JWT_ALGORITHM = 'HS256'
+REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
+REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+REDIS_PASSW = os.getenv('REDIS_PASSW', None)
+REDIS_AUTH_DB = os.getenv('REDIS_AUTH_DB', None)

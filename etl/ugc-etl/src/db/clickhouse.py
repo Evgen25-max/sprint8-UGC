@@ -50,10 +50,11 @@ class ClickHouseStorage:
             )
 
     async def reconnect(self) -> None:
-        with suppress(Exception):
-            if self._client is not None:
-                await asyncio.to_thread(self._client.close)
-        self._client = await asyncio.to_thread(self._connect)
+        async with self._lock:
+            with suppress(Exception):
+                if self._client is not None:
+                    await asyncio.to_thread(self._client.close)
+            self._client = await asyncio.to_thread(self._connect)
 
     async def close(self) -> None:
         with suppress(Exception):

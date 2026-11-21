@@ -14,7 +14,7 @@ Quality = Literal['auto', '360p', '480p', '720p', '1080p', '1440p', '2160p']
 class EventBase(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
 
-    event_id: UUID = Field(default_factory=uuid4)
+    event_id: UUID
     schema_version: int = Field(1, ge=1, le=1)
     event_time: datetime
     session_id: UUID
@@ -24,6 +24,9 @@ class EventBase(BaseModel):
     @field_validator('event_time')
     @classmethod
     def check_event_time(cls, v: datetime) -> datetime:
+        """Проверка актуальности на стороне API.
+        ETL не проверяет возраст — см. ugc-etl/src/models/events.py.
+        """
         if v.tzinfo is None:
             v = v.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
@@ -103,6 +106,18 @@ AnyEvent = Annotated[
 
 
 class EventBatch(BaseModel):
+    """Пачка событий (<=100).
+
+    Идемпотентность:
+    - Клиент генерирует event_id (UUID v4) ОДИН РАЗ для каждого события.
+    - При повторе запроса после 503 — те же event_id в теле.
+    - ETL дедуплицирует через ReplacingMergeTree по event_id.
+
+    Частичный успех:
+    - Если часть событий упала в Kafka, API вернёт 503 с полями
+      accepted_event_ids и failed_event_ids.
+    - Повторяйте только события из failed_event_ids.
+    """
     events: list[AnyEvent] = Field(..., min_length=1, max_length=100)
 
 

@@ -29,14 +29,23 @@
 
 ### 1. Подготовить файл окружения
 
-Из корня репозитория:
+Секреты в `.env.example` **намеренно оставлены пустыми**. Обязательные
+из них (`JWT_SECRET_KEY`, `PASSWORD_PEPPER`, `INTERNAL_API_KEY`,
+`CLICKHOUSE_PASSWORD`) не имеют значений по умолчанию, поэтому сервис
+с незаполненным секретом не стартует. Готового ключа «из репозитория»
+не существует — его нужно сгенерировать.
 
 ```bash
 cd etl
-cp .env.example .env
-nano .env
+./gen_env.sh        # создаст .env (chmod 600) и заполнит секреты
+nano .env           # дозаполнить YANDEX_CLIENT_ID / YANDEX_CLIENT_SECRET
 ```
-В файле примере есть поясняющие комментарии
+
+Скрипт:
+- копирует `.env.example` → `.env`, права `600`;
+- для каждого пустого секрета подставляет `openssl rand -hex 32`;
+- `RATELIMIT_REDIS_PASSW` копирует из `REDIS_PASSW` — это один инстанс Redis;
+- существующий `.env` не перезаписывает.
 
 ### 2. Настройка Яндекс OAuth
 Auth-сервис использует Яндекс OAuth для входа и привязки социальных аккаунтов.
@@ -88,7 +97,7 @@ docker compose --env-file ../../.env -f docker-compose.auth.yml up --build --abo
 
 Функциональные ugc
 ```bash
-cd ~/DEV/YNDX/sprint_8/16.11.2026/current/sprint8-UGC/etl/tests/ugc_functional
+cd tests/ugc_functional
 docker compose up --build --abort-on-container-exit tests
 ```
 

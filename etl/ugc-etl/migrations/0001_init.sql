@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS __DB__.page_views
 )
 ENGINE = ReplacingMergeTree(duration_seconds)
 PARTITION BY toYYYYMM(event_time)
-ORDER BY (view_id);
+ORDER BY (anonymous_id, user_id, session_id, view_id);
 
 CREATE TABLE IF NOT EXISTS __DB__.video_events
 (

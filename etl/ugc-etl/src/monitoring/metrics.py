@@ -17,6 +17,9 @@ BATCH_ROWS = Histogram('ugc_etl_batch_rows', 'Размер пачки', buckets=
 INSERT_LATENCY = Histogram('ugc_etl_insert_seconds', 'Время вставки', ['table'])
 LAG = Gauge('ugc_etl_consumer_lag', 'Лаг консьюмера', ['topic', 'partition'])
 RSS = Gauge('ugc_etl_memory_rss_bytes', 'RSS процесса, байт')
+DLQ_ERRORS = Counter('ugc_etl_dlq_errors_total', 'Ошибок отправки в DLQ', ['topic'])
+REWINDS = Counter('ugc_etl_batch_rewinds_total',
+                  'Откатов позиции чтения после сбоя пачки', ['topic'])
 
 
 def serve_metrics(port: int) -> None:

@@ -1,12 +1,14 @@
+"""Контракт UGC-событий для ETL.
 
-from datetime import datetime, timedelta, timezone
+Отличается от ugc-api версии: НЕ проверяем MAX_EVENT_AGE и MAX_FUTURE_SKEW,
+потому что API уже принял событие, и ETL не должен его отклонять из-за
+задержки в Kafka. Проверяем только корректность формата datetime.
+"""
+from datetime import datetime, timezone
 from typing import Annotated, Literal, Union
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-MAX_FUTURE_SKEW = timedelta(minutes=5)
-MAX_EVENT_AGE = timedelta(days=30)
 
 Quality = Literal['auto', '360p', '480p', '720p', '1080p', '1440p', '2160p']
 
@@ -14,7 +16,7 @@ Quality = Literal['auto', '360p', '480p', '720p', '1080p', '1440p', '2160p']
 class EventBase(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
 
-    event_id: UUID = Field(default_factory=uuid4)
+    event_id: UUID
     schema_version: int = Field(1, ge=1, le=1)
     event_time: datetime
     session_id: UUID
@@ -23,20 +25,17 @@ class EventBase(BaseModel):
 
     @field_validator('event_time')
     @classmethod
-    def check_event_time(cls, v: datetime) -> datetime:
+    def normalize_event_time(cls, v: datetime) -> datetime:
+        """Только нормализация к UTC. Проверка возраста уже выполнена API."""
         if v.tzinfo is None:
             v = v.replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        if v > now + MAX_FUTURE_SKEW:
-            raise ValueError('event_time слишком далеко в будущем')
-        if v < now - MAX_EVENT_AGE:
-            raise ValueError('event_time старше 30 дней')
         return v.astimezone(timezone.utc)
 
 
 class ClickEvent(EventBase):
     event_type: Literal['click'] = 'click'
-    element_type: Literal['film_card', 'trailer', 'category', 'banner', 'button', 'link', 'other']
+    element_type: Literal['film_card', 'trailer', 'category', 'banner',
+                          'button', 'link', 'other']
     element_id: str = Field(..., min_length=1, max_length=128)
     film_id: UUID | None = None
     position: int | None = Field(None, ge=0, le=10000)
@@ -85,13 +84,17 @@ class SearchEvent(EventBase):
 
     @model_validator(mode='after')
     def check_filters(self):
-        if self.rating_from is not None and self.rating_to is not None and self.rating_from > self.rating_to:
+        if (self.rating_from is not None and self.rating_to is not None
+                and self.rating_from > self.rating_to):
             raise ValueError('rating_from больше rating_to')
-        if self.year_from is not None and self.year_to is not None and self.year_from > self.year_to:
+        if (self.year_from is not None and self.year_to is not None
+                and self.year_from > self.year_to):
             raise ValueError('year_from больше year_to')
-        if not any([self.query, self.genres, self.actors, self.sort,
-                    self.rating_from is not None, self.rating_to is not None,
-                    self.year_from is not None, self.year_to is not None]):
+        if not any([
+            self.query, self.genres, self.actors, self.sort,
+            self.rating_from is not None, self.rating_to is not None,
+            self.year_from is not None, self.year_to is not None,
+        ]):
             raise ValueError('search_event без единого фильтра')
         return self
 
@@ -102,22 +105,8 @@ AnyEvent = Annotated[
 ]
 
 
-class EventBatch(BaseModel):
-    events: list[AnyEvent] = Field(..., min_length=1, max_length=100)
-
-
-TOPIC_BY_TYPE: dict[str, str] = {
-    'click': 'ugc.clicks',
-    'page_view': 'ugc.page_views',
-    'video_event': 'ugc.video_events',
-    'search_event': 'ugc.search_events',
-}
-
-
 class KafkaEnvelope(BaseModel):
-    """То, что реально лежит в Kafka: событие + серверное обогащение."""
     model_config = ConfigDict(extra='ignore')
-
     event: AnyEvent
     user_id: UUID | None = None
     received_at: datetime

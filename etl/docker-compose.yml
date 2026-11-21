@@ -20,7 +20,7 @@ x-kafka-env: &kafka-env
   KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
   KAFKA_LOG_DIRS: /var/lib/kafka/data
   KAFKA_HEAP_OPTS: "-Xmx384m -Xms384m"
-  CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk  
+  CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
 
 x-kafka-common: &kafka-common
   image: apache/kafka:3.9.0
@@ -110,7 +110,7 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
     volumes:
       - esdata:/usr/share/elasticsearch/data
     ports:

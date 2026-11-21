@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
-
+from datetime import timedelta
 from conftest import ch_query, make_token, wait_count
 from settings import SERVICE_URL
 
@@ -151,3 +151,78 @@ async def test_request_id_generated(client):
         request_id = r.headers.get('X-Request-Id', '')
         # nginx генерирует 32 hex (MD5), ugc-api может сгенерить UUID (36)
         assert len(request_id) in (32, 36)
+
+
+@pytest.mark.asyncio
+async def test_batch_event_id_required(client):
+    """event_id обязателен: без него API вернёт 422, а не сгенерирует."""
+    e = {
+        'event_time': datetime.now(timezone.utc).isoformat(),
+        'session_id': str(uuid.uuid4()),
+        'anonymous_id': f'anon-{uuid.uuid4().hex[:12]}',
+        'event_type': 'click',
+        'element_type': 'link',
+        'element_id': 'no-id',
+        # event_id намеренно пропущен
+    }
+    async with client.post(URL, json=e) as r:
+        assert r.status == 422
+
+@pytest.mark.asyncio
+async def test_retry_with_same_event_id_deduplicated(client):
+    """Повтор запроса с тем же event_id не создаёт дубликат."""
+    event_id = str(uuid.uuid4())
+    e = base_event(event_type='click', element_type='button', element_id='retry')
+    e['event_id'] = event_id
+
+    # Первая отправка
+    async with client.post(URL, json=e) as r:
+        assert r.status == 202
+
+    # Повтор (имитация ретрая после 503)
+    async with client.post(URL, json=e) as r:
+        assert r.status == 202
+
+    await wait_count(client,
+                     f"SELECT count() FROM ugc.clicks WHERE event_id='{event_id}'",
+                     2)
+    final = await ch_query(client,
+                           f"SELECT count() FROM ugc.clicks FINAL WHERE event_id='{event_id}'")
+    assert int(final) == 1
+
+
+@pytest.mark.asyncio
+async def test_page_view_same_view_id_different_users(client):
+    """Два разных пользователя с одинаковым view_id — два просмотра."""
+    view_id = str(uuid.uuid4())
+
+    a = base_event(event_type='page_view', view_id=view_id, phase='end',
+                   page_type='film', duration_seconds=100)
+    b = base_event(event_type='page_view', view_id=view_id, phase='end',
+                   page_type='film', duration_seconds=200)
+
+    for e in (a, b):
+        async with client.post(URL, json=e) as r:
+            assert r.status == 202
+
+    await wait_count(client,
+                     f"SELECT count() FROM ugc.page_views WHERE view_id='{view_id}'",
+                     2)
+    final = await ch_query(
+        client,
+        f"SELECT count() FROM ugc.page_views FINAL WHERE view_id='{view_id}'")
+    assert int(final) == 2
+
+
+@pytest.mark.asyncio
+async def test_event_age_near_boundary(client):
+    """Событие ровно 29 дней назад должно пройти и через API, и через ETL."""
+    old_time = (datetime.now(timezone.utc) - timedelta(days=29, hours=23)).isoformat()
+    e = base_event(event_type='click', element_type='button', element_id='old')
+    e['event_time'] = old_time
+
+    async with client.post(URL, json=e) as r:
+        assert r.status == 202, await r.text()
+
+    q = f"SELECT count() FROM ugc.clicks WHERE event_id='{e['event_id']}'"
+    await wait_count(client, q, 1)
